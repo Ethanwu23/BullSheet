@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# 测试与静态检查缓存
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# 运行产物（含可能敏感的运行日志与凭据痕迹）
+data/
+state/
+.cache/
+assets/fonts/*.ttf
+assets/fonts/*.otf
+assets/fonts/*.ttc
+
+# 编辑器 / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 明确禁止入库的凭据文件（FR-061）
+cookies.json
+*cookie*.json
+credentials.json
+secrets.json
+*.pem

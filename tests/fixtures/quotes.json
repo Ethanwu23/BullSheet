@@ -1,0 +1,16 @@
+{
+  "as_of": "2026-10-26T20:05:00Z",
+  "note": "离线测试样本，非真实市场数据。用于验证行情链路与数字校验。",
+  "quotes": {
+    "^GSPC": {"price": 6791.5, "previous_close": 6750.1, "volume": 3210000000},
+    "^IXIC": {"price": 22456.3, "previous_close": 22398.7, "volume": 5120000000},
+    "^DJI": {"price": 47120.8, "previous_close": 46980.5, "volume": 412000000},
+    "NVDA": {"price": 186.42, "previous_close": 182.1, "volume": 198000000},
+    "AAPL": {"price": 271.35, "previous_close": 272.9, "volume": 52300000},
+    "MSFT": {"price": 512.6, "previous_close": 508.2, "volume": 21400000},
+    "GOOGL": {"price": 205.8, "previous_close": 204.1, "volume": 33100000},
+    "AMZN": {"price": 232.15, "previous_close": 230.6, "volume": 38700000},
+    "META": {"price": 612.4, "previous_close": 620.1, "volume": 15200000},
+    "TSLA": {"price": 342.8, "previous_close": 335.2, "volume": 96400000}
+  }
+}

@@ -1,0 +1,62 @@
+[project]
+name = "usmarket-daily-xhs"
+version = "0.1.0"
+description = "美股每日情报采集、中文内容生成、小红书图文渲染与审核发布（发布默认模拟）"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.32.0",
+    "feedparser>=6.0.11",
+    "Pillow>=11.0.0",
+    "pydantic>=2.9.0",
+    "python-dateutil>=2.9.0",
+    "python-dotenv>=1.0.1",
+    "pyyaml>=6.0.2",
+    "typer>=0.12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+]
+
+[project.scripts]
+usmarket = "usmarket.cli.main:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "network: tests that require live network access (disabled by default)",
+]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+ignore_missing_imports = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.coverage.run]
+source = ["usmarket"]
+omit = ["*/tests/*"]

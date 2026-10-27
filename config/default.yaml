@@ -1,0 +1,123 @@
+# US Market Daily Xiaohongshu — 默认配置
+# 优先级：CLI 参数 > 环境变量 > 本文件
+# 本文件不得存放任何密钥；密钥一律通过环境变量 / GitHub Secrets 注入。
+
+account:
+  name: 美股日报
+  handle: ""
+
+watchlist:
+  # 三大指数（Yahoo symbol 格式）
+  indices: ["^GSPC", "^IXIC", "^DJI"]
+  # 科技与 AI 龙头 + 用户自定义
+  tickers: ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]
+  # 关注主题（用于新闻归类与检索）
+  topics: ["earnings", "fed", "inflation", "employment", "ai", "semiconductor", "merger"]
+
+news:
+  lookback_hours: 48
+  max_items_per_source: 20
+  min_items_for_confidence: 3
+  request_timeout_seconds: 15
+  max_retries: 3
+
+  # 已实测可用（2026-10-27）。trust: official > established > aggregator
+  feeds:
+    - name: CNBC
+      url: "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+      trust: established
+      kind: market
+    - name: MarketWatch
+      url: "https://feeds.content.dowjones.io/public/rss/mw_topstories"
+      trust: established
+      kind: market
+    - name: Google News Business
+      url: "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en"
+      trust: aggregator
+      kind: market
+    - name: Federal Reserve
+      url: "https://www.federalreserve.gov/feeds/press_all.xml"
+      trust: official
+      kind: macro
+    - name: Investing.com
+      url: "https://www.investing.com/rss/news.rss"
+      trust: established
+      kind: market
+    # 已实测失效，保留为 disabled 以记录调查结论：
+    # - Yahoo Finance 总榜 https://finance.yahoo.com/news/rssindex → 404
+    # - Yahoo 个股 RSS 由 ticker_query_template 动态生成（实测 200）
+    - name: Yahoo Finance Top Stories (DISABLED - 404)
+      url: "https://finance.yahoo.com/news/rssindex"
+      trust: established
+      kind: market
+      enabled: false
+
+  # 按 ticker/主题检索（实测可用）
+  ticker_query_template: "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+
+  # SEC EDGAR：必须声明式 User-Agent，否则 403
+  edgar_enabled: true
+  edgar_forms: ["8-K"]
+  edgar_user_agent: "USMarketDailyXHS/0.1 (contact@example.com)"
+
+market:
+  provider: yahoo
+  stale_minutes: 60
+  timeout_seconds: 15
+  max_retries: 3
+
+llm:
+  # openai_compatible | anthropic | rule_based
+  provider: rule_based
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o-mini"
+  temperature: 0.3
+  max_tokens: 4000
+  timeout_seconds: 120
+  anthropic_model: "claude-sonnet-4-20250514"
+
+content:
+  top_news_min: 3
+  top_news_max: 5
+  body_max_chars: 800
+  title_max_chars: 30
+  max_tags: 10
+  tags: ["#美股", "#美股日报", "#投资理财", "#财经", "#纳斯达克", "#标普500"]
+  disclaimer: "本文仅为公开信息整理，不构成投资建议；行情数据可能存在延迟，请以交易所与官方渠道为准。"
+
+image:
+  width: 1080
+  height: 1440
+  min_pages: 5
+  max_pages: 7
+  template: daily_review
+  margin: 80
+  theme:
+    background: "#0F172A"
+    surface: "#16213E"
+    accent: "#F97316"
+    positive: "#22C55E"
+    negative: "#EF4444"
+    text_primary: "#F8FAFC"
+    text_secondary: "#94A3B8"
+    muted: "#334155"
+    # 留空则自动探测系统中文字体
+    font_regular: ""
+    font_bold: ""
+
+publish:
+  # mock（默认，模拟）| manual_export（导出人工发布包）| browser（默认禁用，未验收）
+  publisher: mock
+  max_retries: 3
+  backoff_seconds: 1.0
+  enable_browser: false
+
+schedule:
+  # after_close（第一版唯一启用）| pre_open（预留）
+  mode: after_close
+  timezone: "America/New_York"
+  # UTC 22:30 ≈ 美东夏令时 18:30 / 冬令时 17:30（盘后）
+  cron_utc: "30 22 * * 1-5"
+
+data_dir: "data"
+log_level: "INFO"
