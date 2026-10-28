@@ -35,13 +35,13 @@ def test_offline_pipeline_end_to_end(offline_cfg: AppConfig):
     assert paths["sources"].exists()
     assert (paths["base"] / "REVIEW.md").exists()
 
-    # 图片
+    # 图片：默认 one_page 单图模板（宽固定，高自适应长图）
     assert (paths["images"] / "cover.png").exists()
     pages = sorted(paths["images"].glob("page_*.png"))
-    assert 5 <= len(pages) <= 7
-    for image_path in [paths["images"] / "cover.png", *pages]:
-        with Image.open(image_path) as img:
-            assert img.size == (offline_cfg.image.width, offline_cfg.image.height)
+    assert pages == []
+    with Image.open(paths["images"] / "cover.png") as img:
+        assert img.size[0] == offline_cfg.image.width
+        assert img.size[1] >= offline_cfg.image.width
 
     # 任务状态
     assert task.status == TaskStatus.REVIEW

@@ -138,8 +138,9 @@ def test_render_command_regenerates_images(offline_cfg: AppConfig):
     assert not list(paths["images"].glob("*.png"))
 
     _run("render", "--date", DATE, "--data-dir", str(offline_cfg.data_dir))
+    # 默认 one_page 单图模板：只有 cover.png，无正文页
     assert (paths["images"] / "cover.png").exists()
-    assert len(list(paths["images"].glob("page_*.png"))) >= 5
+    assert list(paths["images"].glob("page_*.png")) == []
 
 
 def test_manual_export_adapter(monkeypatch, tmp_path: Path, offline_cfg: AppConfig):
