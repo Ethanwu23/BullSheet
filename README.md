@@ -1,431 +1,197 @@
 # US Market Daily · 美股每日简报
 
-> 每个交易日自动采集美股新闻与行情 → AI 生成中文简报内容 → 渲染**一张长图**，每天早上从 GitHub 下载即可阅读。
+> 每个交易日采集美股行情与新闻 → 确定性生成数据内容 → LLM 只做两件事（**盘后总结** + **要闻标题中译**）→ 渲染**一张长图**。
+>
+> 行情数字全程不经过模型，从数据源到图片逐位可追溯。
 
-**产出物**：每日一张 1080 宽的信息长图（标题、三大指数、概览、要闻、个股异动、明日关注、风险提示全部在一图内），附 Markdown 版文字稿与数据来源清单。
+**产出物**（每天一份，本地或 GitHub Actions 手动触发）：
+
+| 文件 | 内容 |
+| --- | --- |
+| `images/cover.png` | 简报长图（1080 宽，高度自适应）：标题、三大指数、概览、要闻速递、个股异动（七姐妹+SpaceX，收盘价）、风险提示与数据来源 |
+| `content/evening_summary.txt` | 盘后总结（120–180 字中文，AI 撰写，可直接复制配图分享） |
+| `content/report.md` | 完整 Markdown 文字稿 |
+| `content/sources.md` | 数据来源与限制清单 |
+
+示例：`docs/examples/one_page_llm.png`（真实产出）、`evening_summary_example.txt`、`llm_report_example.md`。
 
 ---
 
 ## 目录
 
-- [项目能力概览](#项目能力概览)
-- [环境要求](#环境要求)
-- [安装步骤](#安装步骤)
-- [配置 AI API](#配置-ai-api)
-- [配置新闻与行情数据源](#配置新闻与行情数据源)
-- [本地运行](#本地运行)
-- [生成指定日期的简报](#生成指定日期的简报)
-- [简报图片说明](#简报图片说明)
-- [配置 GitHub Actions](#配置-github-actions)
-- [已验证 / 模拟实现清单](#已验证--模拟实现清单)
+- [快速开始](#快速开始)
+- [核心设计](#核心设计)
+- [配置](#配置)
+- [GitHub Actions](#github-actions)
+- [已验证清单](#已验证清单)
+- [故障排查](#故障排查)
 - [项目结构](#项目结构)
 - [测试](#测试)
-- [故障排查](#故障排查)
-- [合规与许可](#合规与许可)
+- [许可](#许可)
 
 ---
 
-## 项目能力概览
-
-| 模块 | 能力 | 实现状态 |
-| --- | --- | --- |
-| A 新闻采集 | RSS/Atom 多源 + SEC EDGAR；去重、时效过滤、来源分级、可信度标注 | ✅ 已验证（真实网络，20 源并发） |
-| B 行情数据 | 三大指数 + 自选股；涨跌幅、前收、交易阶段；缺失/过期/异常标记 | ✅ 已验证（Yahoo chart 实测） |
-| C AI 内容生成 | 可插拔 LLM（百炼 **已实测** / OpenAI 兼容 / Anthropic / 规则兜底）；结构化 JSON | ✅ 已验证（CI 真实产出） |
-| D 简报图片 | **一张自适应高度长图**；中文排版；数据与文案一致 | ✅ 已验证 |
-| E 定时调度 | GitHub Actions **手动触发** + concurrency + artifact | ✅ 已验证（真实运行成功） |
-| F 任务管理 | 状态机、CLI、失败定位、重跑、幂等 | ✅ 已验证 |
-
-**设计原则**（完整版见 `.specify/memory/constitution.md`）：
-
-1. 行情数字只能来自真实数据源，缺失即标记 `数据缺失`，**禁止 AI 编造或补全**；
-2. `published_at`（源提供）与 `fetched_at`（系统生成）严格分离；
-3. 原始行情（`raw/quotes.json`）与 AI 文本（`content/content.json`）分开存储，每个数字可追溯；
-4. 外部新闻只作为数据，不改变系统指令、不触发代码执行。
-
----
-
-## 环境要求
-
-- **Python 3.11+**（开发与验证环境为 3.13.12）
-- 依赖：`requests`、`feedparser`、`Pillow`、`pydantic>=2`、`python-dateutil`、`pyyaml`、`typer`、`python-dotenv`
-- **中文字体**（图片渲染必需）：
-  - Windows：系统自带 `msyh.ttc` 即可
-  - macOS：`PingFang.ttc`
-  - Linux / CI：需安装 `fonts-noto-cjk` 或运行 `python scripts/fetch_fonts.py`
-- 可选：`uv`（更快的安装器）
-
----
-
-## 安装步骤
+## 快速开始
 
 ```bash
-cd BullSheet
+# 安装（Python 3.11+）
+pip install -e ".[dev]"            # 或 uv sync --extra dev
+cp .env.example .env               # 填入 DASHSCOPE_API_KEY（可选，见下）
 
-# 创建虚拟环境（任选其一）
-python -m venv .venv && source .venv/bin/activate     # Linux/macOS
-python -m venv .venv && .venv\Scripts\activate        # Windows PowerShell
+# 生成今天的简报（约 1-2 分钟：真实行情+新闻 → 百炼 → 单图）
+usmarket generate
 
-# 安装
-pip install -e ".[dev]"
-# 或使用 uv（依赖已锁定在 uv.lock）：
-uv sync --extra dev
-
-# 复制环境变量模板
-cp .env.example .env        # Windows: copy .env.example .env
-
-# 自检（不会打印任何密钥值）
-usmarket check-config
+# 查看产物
+explorer data\<日期>\images        # 长图
+notepad data\<日期>\content\evening_summary.txt   # 盘后总结文字
+python scripts/inspect_content.py data\<日期>     # 命令行看全部内容
 ```
+
+**不想配 LLM 也能跑**：`LLM_PROVIDER=rule_based`（默认）时全部内容由规则式生成，要闻标题为英文原文，数字同样准确。
+
+常用命令：
+
+| 命令 | 用途 |
+| --- | --- |
+| `usmarket generate` | 生成最近已收盘交易日的简报 |
+| `usmarket generate --date 2026-10-27` | 指定日期 |
+| `usmarket generate --offline --date 2026-10-26` | 离线测试（**假数据**，只看排版） |
+| `usmarket llm-check` | LLM 连通性自检 |
+| `usmarket list` / `show --date <日期>` | 任务状态与失败原因 |
 
 ---
 
-## 配置 AI API
+## 核心设计
 
-LLM 通过环境变量配置。**不配置 key 也能完整运行**（规则兜底生成）。
+### 1. 行情数字不经过模型（ADR-016）
 
-### 方式一：阿里百炼 / DashScope（已实测，推荐）
-
-```env
-LLM_PROVIDER=dashscope
-DASHSCOPE_API_KEY=sk-xxxxxxxx
+```
+行情快照 ──► 规则式确定性生成 ──► 基础内容（指数表/个股表/来源/文案）
+                                    │
+新闻 ──────► LLM 窄任务（仅两样）：  ▼
+              ① 盘后总结一段      合并（只替换这两处）→ 校验 → 产出
+              ② 要闻标题英→中
 ```
 
-只有两行：端点与模型（`qwen3.8-flash`）自动填充。可选覆盖：
+- 指数、个股、涨跌幅、来源链接、时间等字段**由代码确定性生成**，模型在机制上无法改动；
+- LLM 输出合并前仍过完整校验（数字可追溯/来源/合规），失败重试一次后沿用规则式内容；
+- 合并后 `generator=hybrid`；纯规则式为 `rule_based`。
 
-```env
-LLM_MODEL=qwen3.8-max              # 可选：flash/max/27b
-LLM_EXTRA_BODY_JSON={"chat_template_kwargs": {"enable_thinking": false}}
-LLM_TIMEOUT_SECONDS=180
-```
+### 2. 收盘数据口径（ADR-017）
 
-- `LLM_EXTRA_BODY_JSON` 关闭思考链（**百炼专有**）：开启时单次生成约 100–120s，关闭后约 30–40s
-- 查看当前 key 可用的模型：`usmarket llm-models --contains qwen`
+涨跌幅一律使用**日线收盘序列**：最近已收盘交易日的收盘价 vs 前一日收盘价。盘中运行自动跳过未收盘 bar；日线滞后时如实标记 STALE，绝不冒充。
 
-### 方式二：OpenAI 兼容端点
+> 历史教训：曾误用 Yahoo `chartPreviousClose`（5 日窗口基数），导致显示的是约 5 日累计涨幅（TSLA 显示 +9.03% 而真实昨涨 +4.04%）。已修复并有回归测试。
 
-```env
-LLM_PROVIDER=openai_compatible
-LLM_API_KEY=sk-xxxxxxxx
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4o-mini
-```
+### 3. 数据缺失如实呈现
 
-兼容 OpenAI / DeepSeek / OpenRouter / Moonshot / GitHub Models 等所有 `/v1/chat/completions` 端点。
-
-### 方式三：Anthropic（代码完成，未实测）
-
-```env
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxx
-```
-
-### 方式四：规则兜底（默认，无需 key）
-
-```env
-LLM_PROVIDER=rule_based
-```
-
-只复用已核实的行情与新闻数字，不做翻译、不推测。产物 `generator=rule_based`。
-
-### 连通性自检
-
-```bash
-usmarket llm-check          # 真实调用一次，报告延迟与 JSON 可解析性
-```
-
-> **失败兜底**：LLM 超时、报错或输出未通过校验（自动重试 1 次）后，系统回退规则式生成并记录告警，绝不把未经校验的内容用于产出。
+SpaceX 之外任何标的取不到行情时显示"数据缺失"卡片，禁止编造或用占位数字补全；发布前的数字校验 fail-closed。
 
 ---
 
-## 配置新闻与行情数据源
+## 配置
 
-### 新闻源
+`.env`（或 GitHub Variables/Secrets）：
 
-默认启用 6 个实测可用的源 + SEC EDGAR：
+```env
+LLM_PROVIDER=dashscope            # dashscope | openai_compatible | anthropic | rule_based
+DASHSCOPE_API_KEY=sk-xxx          # dashscope 时仅需此项
+LLM_EXTRA_BODY_JSON={"chat_template_kwargs": {"enable_thinking": false}}  # 关思考链，30-40s
+LLM_MAX_TOKENS=8000
+MARKET_PROVIDER=yahoo             # 默认，无需 key
+SEC_USER_AGENT="USMarketDaily/0.1 (you@example.com)"   # SEC 要求，否则 403
+```
 
-| 来源 | 类型 | 可信度 |
-| --- | --- | --- |
-| CNBC RSS | 市场新闻 | established |
-| MarketWatch RSS | 市场新闻 | established |
-| Google News Business / 按 ticker 搜索 | 聚合 | aggregator |
-| 美联储新闻稿 RSS | 官方宏观 | official |
-| Investing.com RSS | 市场新闻 | established |
-| SEC EDGAR（8-K 公告） | 官方公告 | official |
-
-自定义股票与主题（`config/default.yaml`）：
+**自选股**（`config/default.yaml`）：默认七姐妹 + SPCX（SpaceX，NASDAQ 已上市）：
 
 ```yaml
 watchlist:
   indices: ["^GSPC", "^IXIC", "^DJI"]
-  tickers: ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]
-  topics: ["earnings", "fed", "inflation", "ai", "semiconductor"]
+  tickers: ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "SPCX"]
 ```
 
-或 CLI 覆盖：`usmarket generate --tickers NVDA,TSLA`。
+**图片主题**（`config/default.yaml` → `image.theme`）：背景/强调色/涨跌色/字体均可配置，留空自动探测系统中文字体。
 
-**SEC EDGAR 必须声明身份**（否则 403）：
-
-```env
-SEC_USER_AGENT="USMarketDaily/0.1 (your-email@example.com)"
-```
-
-### 行情源
-
-```env
-MARKET_PROVIDER=yahoo          # yahoo（默认，无需 key）| finnhub | mock
-MARKET_STALE_MINUTES=60
-```
-
-- **`yahoo`**：`query1.finance.yahoo.com/v8/finance/chart/<symbol>`，支持原始指数代码。⚠️ 非公开接口，无 SLA，失败时该标的标记 `数据缺失`
-- **`finnhub`**：需 key；免费档不支持 `^GSPC/^IXIC/^DJI`
-- **`mock`**：读取 `tests/fixtures/quotes.json`，完全离线（测试用，**数据是假的**）
-
-**交易阶段**由程序按美东时区自行判定（盘前/盘中/盘后/休市，含 NYSE 节假日与夏令时）。
+模板：`one_page`（默认，单张长图）；`daily_review` / `flash_brief`（多页，备用）。
 
 ---
 
-## 本地运行
+## GitHub Actions
 
-```bash
-# 状态自检
-usmarket check-config
+**仅手动触发**（不设定时，按需运行节省 token）：
 
-# LLM 连通性自检（不配置 LLM 时可跳过）
-usmarket llm-check
+1. 打开 https://github.com/Ethanwu23/BullSheet/actions
+2. US Market Daily → Run workflow（可指定 `run_date` / `template`）
+3. 等 3–5 分钟 → 下载 artifact（zip 解压即得长图 + 总结 + 文字稿）
 
-# 生成今天的简报（自动解析最近已收盘交易日；联网+百炼约 2 分钟）
-usmarket generate
-
-# 完全离线（测试数据，数据是假的，仅看排版）
-usmarket generate --date 2026-10-26 --offline
-
-# 查看任务
-usmarket list
-usmarket show --date 2026-10-26
-```
-
-产物目录：
-
-```
-data/2026-10-28/
-├── images/
-│   ├── cover.png           ← 简报长图（唯一产出图片）
-│   └── manifest.json
-├── content/
-│   ├── content.json        # 结构化内容
-│   ├── report.md           # Markdown 文字稿
-│   └── sources.md          # 来源与数据清单
-├── raw/
-│   ├── news.jsonl          # 原始新闻
-│   └── quotes.json         # 原始行情（provider 原始片段，可追溯）
-├── task.json               # 任务状态
-└── run.log                 # 结构化日志（已脱敏）
-```
+所需配置（已在仓库设置）：Secret `DASHSCOPE_API_KEY`；Variable `LLM_PROVIDER=dashscope`。
 
 ---
 
-## 生成指定日期的简报
+## 已验证清单
 
-```bash
-usmarket generate --date 2026-10-26
-```
+以实际执行为准（详见 `specs/001-us-market-daily-xhs/checklists/implementation.md`）：
 
-**休市处理**：目标日是周末/节假日或尚未收盘时，自动使用"最近一个已收盘交易日"并在图中明确标注。
-
----
-
-## 简报图片说明
-
-**默认产出**：`one_page` 单图模板——一张 1080 宽、高度自适应（约 2500–3000）的长图：
-
-```
-2026-10-27 美股收盘速览
-AI 撰写的中文标题
-────────────────────────
-标普500 / 纳指 / 道指（真实行情卡片）
-今日概览（AI 撰写）
-要闻速递 3–5 条（中文标题+解读+来源时间）
-个股异动 6 只
-明日关注
-风险提示
-数据来源 + 免责声明
-```
-
-示例：
-- `docs/examples/one_page_llm.png` —— **百炼真实生成的单图**（推荐先看）
-- `docs/examples/one_page.png` —— 离线测试数据版
-- `docs/examples/llm_report_example.md` —— Markdown 文字稿
-
-另有两种多页模板可选（非默认）：
-
-| 模板 | 说明 |
+| 项 | 状态 |
 | --- | --- |
-| `daily_review` | 多页复盘：封面 + 5–7 页正文 |
-| `flash_brief` | 重大新闻专题：每条新闻一页 |
+| 全量测试 | **242 passed / 4 skipped** |
+| 行情收盘口径 | ✅ 实测 TSLA +4.04%（修复前误显示 +9.03%），昨收→今收逐位正确 |
+| LLM 窄任务（百炼 qwen3.8-flash） | ✅ generator=hybrid，中文标题+总结，数字与行情层逐位一致 |
+| 行情不经过模型 | ✅ 专项测试锁定（`test_market_data_never_passes_through_llm`） |
+| 个股=七姐妹+SPCX | ✅ 强制过滤杂股+补齐漏写，恰好 8 只 |
+| 单图渲染 | ✅ 一张长图，非空白/断行/数字一致均有测试 |
+| GitHub Actions | ✅ 真实运行成功（手动触发，含字体/测试/生成/上传） |
+| 日志脱敏 | ✅ 无 token/cookie/password 泄漏（测试断言） |
 
-```bash
-usmarket render --date 2026-10-26 --template one_page     # 单图（默认）
-usmarket render --date 2026-10-26 --template daily_review # 多页
-```
-
-**可配置项**（`config/default.yaml` → `image`）：
-
-```yaml
-image:
-  width: 1080
-  template: one_page      # 默认单图
-  margin: 80
-  theme:
-    background: "#0F172A"   # 背景
-    surface: "#16213E"      # 卡片
-    accent: "#F97316"       # 强调色
-    positive: "#22C55E"     # 上涨
-    negative: "#EF4444"     # 下跌
-    font_regular: ""        # 留空自动探测系统中文字体
-
-account:
-  name: 美股日报             # 图片底部署名
-```
-
-**渲染保证**：
-- 中英混排换行，不在"标普500"这类词中间断行；
-- 超长文本截断加省略号，不溢出画布；
-- 每张图渲染后做"非空白"检查；
-- 图片中的数字与 `content.json` 同源（测试中比对），AI 文案中的 emoji/Markdown 在渲染前剥离（文字稿保留原样）。
+**已知限制**：Anthropic provider 未实测（无 key）；Yahoo 为非公开接口无 SLA；LLM 失败时兜底为英文标题（数字不受影响）。详见 `docs/limitations.md`。
 
 ---
 
-## 配置 GitHub Actions
+## 故障排查
 
-工作流：`.github/workflows/daily.yml`。
-
-| 触发方式 | 说明 |
+| 现象 | 处理 |
 | --- | --- |
-| `workflow_dispatch` | **仅手动触发**（不设定时，按需运行节省 token）：Actions 页面 → Run workflow，可指定 `run_date` / `template` / `offline` |
-
-**使用方式**：想看简报时，打开
-https://github.com/Ethanwu23/BullSheet/actions → 选择 US Market Daily → Run workflow → 等几分钟 → 下载 artifact（zip 解压即得长图 + 文字稿）。
-
-**关键设计**：
-- 目标交易日按美东时间解析"最近一个已收盘交易日"，不依赖触发时间——**任何时候手动触发都能得到正确的最新简报**
-- `concurrency` 避免同日重复生成
-- 失败时自动上传日志为 artifact 并写入失败摘要
-- 凭据通过 **GitHub Secrets** 注入
-
-### 需要配置的 Secrets / Variables
-
-| 名称 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `DASHSCOPE_API_KEY` | Secret | 用百炼时必填 | 百炼密钥 |
-| `LLM_PROVIDER` | Variable | 否 | `dashscope`（已配置） |
-| `LLM_MAX_TOKENS` | Variable | 否 | 默认 8000（低于 4000 会截断） |
-| `SEC_USER_AGENT` | Variable | 建议 | 形如 `App/0.1 (you@example.com)` |
-| `IMAGE_TEMPLATE` | Variable | 否 | 默认 `one_page` |
-
-### 手动重跑某天
-
-```bash
-gh workflow run daily.yml -f run_date=2026-10-26
-# 或本地
-usmarket generate --date 2026-10-26
-```
-
----
-
-## 已验证 / 模拟实现清单
-
-以**实际执行**为准，不以文档声称。
-
-### ✅ 已通过真实测试
-
-| 项目 | 验证方式 |
-| --- | --- |
-| `pytest` 全量测试 | 232 passed / 4 skipped |
-| **LLM 真实生成（百炼 qwen3.8-flash）** | CI 真实运行：`generator=openai_compatible`，单图产出通过全部校验 |
-| GitHub Actions 定时任务 | 真实自动触发并成功（含中文字体安装、测试、生成、上传 artifact） |
-| 单图模板（CI 真实产出） | 1 张长图 + Markdown 文字稿，604KB |
-| Yahoo chart 行情（三大指数） | 真实请求，`usable=10/10` |
-| 20 个新闻源并发采集 | 真实请求，全部成功 |
-| LLM 失败重试 | 单次抖动不降级（测试） |
-| 日志脱敏 | 测试断言日志中无 cookie/token/password |
-| 数字可追溯校验 | 编造数字 100% 被拦截（测试） |
-| 交易阶段/DST/节假日 | 单元测试覆盖 |
-
-### ⚠️ 未实测 / 已知限制
-
-| 项目 | 状态 |
-| --- | --- |
-| Anthropic provider | 代码完成，本机无 key，未实测 |
-| Finnhub / Alpha Vantage | 未实测（无 key）；Alpha Vantage 未实现 |
-| Yahoo 非公开接口 | 无 SLA，可能限流或变更；失败时标记缺失，不编造 |
-
-详见 [`docs/limitations.md`](docs/limitations.md)。
+| 数据不对 | 检查是否用了 `--offline`（假数据）；看 `raw/quotes.json` 的 `provider` 是否 `yahoo` |
+| `FontMissingError` | 安装 `fonts-noto-cjk` 或 `python scripts/fetch_fonts.py` |
+| LLM 超时 | `LLM_TIMEOUT_SECONDS=180` + 关思考链（见配置） |
+| LLM 截断 | 调大 `LLM_MAX_TOKENS`（默认 8000） |
+| 要闻是英文 | LLM 窄任务失败兜底所致；查 `run.log` 中「LLM 窄任务失败」原因，多为临时网络问题，重跑即可 |
+| 任务失败 | `usmarket show --date <日期>` 看阶段与错误，修复后 `usmarket rerun` |
 
 ---
 
 ## 项目结构
 
 ```
-BullSheet/
-├── src/usmarket/
-│   ├── config.py              # YAML + env + CLI 三级配置，敏感项校验
-│   ├── logging_setup.py       # 结构化日志 + 凭据脱敏
-│   ├── collectors/            # RSS/Atom、SEC EDGAR、采集编排
-│   ├── market_data/           # provider、交易日历、阶段判定、质量标记
-│   ├── processors/            # 清洗、去重、分类、时效过滤
-│   ├── ai/                    # LLM Provider 抽象、prompt、规则兜底
-│   ├── validation/            # 结构 / 数字 / 来源 / 合规校验
-│   ├── content/               # Markdown、JSON、来源清单
-│   ├── image_renderer/        # 字体、排版、主题、三种模板（one_page 默认）
-│   ├── scheduler/             # 触发时间 → 目标交易日
-│   ├── storage/               # 任务模型、状态机、文件存储
-│   └── cli/                   # Typer 命令与端到端 pipeline
-├── config/default.yaml
-├── tests/{unit,integration,fixtures}
-├── docs/
-├── .github/workflows/daily.yml
-└── specs/
+src/usmarket/
+├── collectors/        # RSS/Atom 多源 + SEC EDGAR
+├── market_data/       # Yahoo provider（日线收盘口径）、交易日历、阶段判定
+├── processors/        # 清洗、去重、分类、时效过滤
+├── ai/                # LLM 窄任务（总结+翻译）、规则式基础生成
+├── validation/        # 数字可追溯/来源/合规校验
+├── content/           # Markdown/JSON/来源清单落盘
+├── image_renderer/    # 字体、中文排版、one_page 模板（默认）
+├── storage/           # 任务状态机（文件后端，可选 SQLite）
+└── cli/               # usmarket 命令
 ```
+
+SDD 产物：`specs/001-us-market-daily-xhs/`（spec / plan / tasks / analyze / checklists）；
+决策记录：`docs/decisions.md`（ADR-001 ~ 017）。
 
 ---
 
 ## 测试
 
 ```bash
-python -m pytest tests -q                        # 全量离线测试
-$env:NETWORK_TESTS=1; python -m pytest tests/integration/test_network_sources.py -m network -q   # 真实数据源
-python -m ruff check src tests                   # 静态检查
+python -m pytest tests -q                          # 全量离线（无需网络/key）
+$env:NETWORK_TESTS=1; python -m pytest tests/integration/test_network_sources.py -m network -q
+python -m ruff check src tests
 ```
 
 ---
 
-## 故障排查
+## 许可
 
-| 现象 | 原因 | 处理 |
-| --- | --- | --- |
-| `FontMissingError` | 系统无中文字体 | 安装 `fonts-noto-cjk` 或 `python scripts/fetch_fonts.py` |
-| `敏感配置缺失: LLM_API_KEY` | 选了 LLM 但没 key | 填 key 或 `LLM_PROVIDER=rule_based` |
-| **数据不对** | 跑了 `--offline`（测试样本，provider=mock） | 去掉 `--offline`；查 `raw/quotes.json` 的 `provider` 是否为 `yahoo` |
-| 行情显示"数据缺失" | provider 失败；**这是正确行为** | 看 `raw/quotes.json` 的 `quality_note` |
-| SEC 返回 403 | 未声明 User-Agent | 设置 `SEC_USER_AGENT` |
-| `LLM 生成失败: ReadTimeout` | 生成超时 | `LLM_TIMEOUT_SECONDS=180` + 关思考链（见上文） |
-| `LLM 输出被 max_tokens 截断` | 输出 token 不够 | 调大 `LLM_MAX_TOKENS`（默认 8000） |
-| `[validation] 数字找不到出处` | LLM 编造数字 | **正确行为**，已拦截；换模型或降 temperature |
-| 图片空白方块 | 文案含 emoji | 渲染前已自动剥离；文字稿保留原样 |
-| 想直接看生成内容 | — | `python scripts/inspect_content.py data/<date>` |
-| 任务卡在 `failed` | 某阶段失败 | `usmarket show --date <date>` 看 `stage` 与 `error` |
-| Actions 定时不准 | GitHub cron 延迟 | 设计已规避：按"最近已收盘交易日"解析 |
+MIT。数据来源条款：RSS 内容版权归原媒体（仅引用标题摘要并保留链接）；Yahoo 非公开接口无 SLA；SEC EDGAR 公共数据需声明 User-Agent。
 
----
-
-## 合规与许可
-
-- 本项目代码：**MIT**。
-- 第三方内容与条款：
-  - RSS 内容版权归原媒体所有；本项目仅引用标题与摘要并保留原始链接，不做全文转载。
-  - Yahoo 为非公开接口，无 SLA；商用前请自行评估其服务条款。
-  - SEC EDGAR 为公共数据，要求声明式 User-Agent（已实现）。
-- **未复用**任何无 LICENSE 的开源项目代码，详见 [`docs/decisions.md`](docs/decisions.md)。
-
-> 本项目输出**不构成投资建议**。行情数据可能存在延迟，请以交易所与官方渠道为准。
+> 本项目输出不构成投资建议。行情可能存在延迟，请以交易所与官方渠道为准。
