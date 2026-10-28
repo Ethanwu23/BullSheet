@@ -1,4 +1,4 @@
-name: US Market Daily（美股日报 + 小红书图文）
+name: US Market Daily（美股每日简报，产出一张长图）
 
 on:
   schedule:
@@ -77,8 +77,7 @@ jobs:
           LLM_MODEL: ${{ vars.LLM_MODEL }}
           MARKET_PROVIDER: ${{ vars.MARKET_PROVIDER || 'yahoo' }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-          XHS_PUBLISHER: ${{ vars.XHS_PUBLISHER || 'mock' }}
-          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'USMarketDailyXHS/0.1 (actions@users.noreply.github.com)' }}
+          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'USMarketDaily/0.1 (actions@users.noreply.github.com)' }}
         run: usmarket check-config
 
       - name: 生成日报与图文
@@ -98,8 +97,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MARKET_PROVIDER: ${{ vars.MARKET_PROVIDER || 'yahoo' }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-          XHS_PUBLISHER: ${{ vars.XHS_PUBLISHER || 'mock' }}
-          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'USMarketDailyXHS/0.1 (actions@users.noreply.github.com)' }}
+          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'USMarketDaily/0.1 (actions@users.noreply.github.com)' }}
           LOG_LEVEL: INFO
         run: |
           set -o pipefail

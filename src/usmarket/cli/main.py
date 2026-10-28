@@ -26,7 +26,7 @@ from usmarket.storage.models import TaskStatus
 from usmarket.storage.state_machine import can_transition
 
 app = typer.Typer(
-    help="美股每日情报 → 中文内容 → 小红书图文 → 人工审核 → 发布（默认模拟）",
+    help="美股每日简报：采集新闻与行情 → AI 生成中文内容 → 渲染一张长图",
     no_args_is_help=True,
 )
 
@@ -397,7 +397,7 @@ def publish(
             typer.secho("（幂等命中：已跳过重复发布）", fg=typer.colors.YELLOW)
         if outcome.simulated:
             typer.secho(
-                "注意：本次为模拟/导出发布，真实小红书发布尚未验收。",
+                "注意：本次为模拟流程记录（本项目仅生成内容，不含平台发布）。",
                 fg=typer.colors.YELLOW,
             )
     else:
