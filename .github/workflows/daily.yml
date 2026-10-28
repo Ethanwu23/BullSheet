@@ -88,7 +88,8 @@ jobs:
           LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
           LLM_MODEL: ${{ vars.LLM_MODEL }}
           # 百炼关闭思考链（实测：开启时一次生成 100-120s 易超时，关闭后 30-40s）
-          LLM_EXTRA_BODY_JSON: ${{ vars.LLM_EXTRA_BODY_JSON || '{"chat_template_kwargs": {"enable_thinking": false}}' }}
+          # 注意：值是 JSON，含冒号+空格会破坏 YAML 解析，因此默认值放 Variables 而非此处
+          LLM_EXTRA_BODY_JSON: "${{ vars.LLM_EXTRA_BODY_JSON }}"
           LLM_TIMEOUT_SECONDS: ${{ vars.LLM_TIMEOUT_SECONDS || '180' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MARKET_PROVIDER: ${{ vars.MARKET_PROVIDER || 'yahoo' }}
