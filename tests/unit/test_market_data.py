@@ -222,3 +222,104 @@ def test_snapshot_has_no_fabricated_numbers(offline_cfg, mock_provider):
             assert quote.price is not None
             assert quote.provider == "mock"
             assert "entry" in quote.raw
+
+
+# ---------- Yahoo 日线收盘口径回归测试 ----------
+# 背景（2026-10-28 用户实测反馈）：meta.chartPreviousClose 在 range=5d 下是
+# 「窗口前一日」收盘，导致涨跌幅实际是 5 日累计（TSLA 显示 +9.03%，真实 +4.04%）。
+# 修复后必须使用日线序列：最近已收盘 bar 的 close 与其前一根的 close。
+
+def _ts(year, month, day):
+    return int(datetime(year, month, day, 13, 30, tzinfo=UTC).timestamp())
+
+
+def _canned_payload():
+    """2026-10-21 ~ 10-27 的 TSLA 日线（真实数据），meta 含误导性 chartPreviousClose。"""
+    return {
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "symbol": "TSLA",
+                        "regularMarketPrice": 407.46,
+                        "chartPreviousClose": 373.71,  # 5 日窗口前收盘（≠昨收）
+                        "regularMarketTime": int(
+                            datetime(2026, 10, 28, 5, 0, tzinfo=UTC).timestamp()
+                        ),
+                    },
+                    "timestamp": [_ts(2026, 10, d) for d in (21, 22, 23, 26, 27)],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "close": [386.47, 374.58, 372.22, 391.62, 407.46],
+                                "volume": [1e6, 1e6, 1e6, 1e6, 1e6],
+                            }
+                        ]
+                    },
+                }
+            ],
+            "error": None,
+        }
+    }
+
+
+class TestYahooDailyClose:
+    def _provider(self, monkeypatch, payload):
+        from usmarket.market_data import yahoo as yahoo_module
+
+        monkeypatch.setattr(yahoo_module, "fetch_json", lambda *a, **k: payload)
+        return yahoo_module.YahooQuoteProvider()
+
+    def test_change_percent_is_daily_close_to_close(self, monkeypatch):
+        """涨跌幅必须是昨收→今收（+4.04%），而不是 5 日累计（+9.03%）。"""
+        prov = self._provider(monkeypatch, _canned_payload())
+        q = prov.fetch_quote(
+            "TSLA", "特斯拉", now=datetime(2026, 10, 28, 5, 0, tzinfo=UTC)
+        )
+        assert q.price == pytest.approx(407.46)
+        assert q.previous_close == pytest.approx(391.62)
+        assert q.change_percent == pytest.approx(4.04, abs=0.01)
+        assert q.change_percent != pytest.approx(9.03, abs=0.1)
+        assert q.quality == QuoteQuality.OK
+
+    def test_in_progress_bar_is_skipped_mid_session(self, monkeypatch):
+        """盘中运行时：当日未收盘 bar 必须跳过，取上一已收盘交易日。"""
+        payload = _canned_payload()
+        result = payload["chart"]["result"][0]
+        result["timestamp"].append(_ts(2026, 10, 28))  # 当日盘中 bar
+        result["indicators"]["quote"][0]["close"].append(430.00)
+        result["indicators"]["quote"][0]["volume"].append(5e5)
+
+        prov = self._provider(monkeypatch, payload)
+        q = prov.fetch_quote(
+            "TSLA", "特斯拉", now=datetime(2026, 10, 28, 16, 0, tzinfo=UTC)  # 11:00 ET 盘中
+        )
+        assert q.price == pytest.approx(407.46)  # 10-27 收盘，不是 430
+        assert q.change_percent == pytest.approx(4.04, abs=0.01)
+
+    def test_lagged_daily_data_is_marked_stale(self, monkeypatch):
+        """日线缺失最新已收盘交易日 → STALE（不冒充最新收盘）。"""
+        payload = _canned_payload()
+        result = payload["chart"]["result"][0]
+        # 删掉 10-27 的 bar，模拟数据滞后
+        result["timestamp"] = result["timestamp"][:-1]
+        result["indicators"]["quote"][0]["close"] = result["indicators"]["quote"][0]["close"][:-1]
+        result["indicators"]["quote"][0]["volume"] = result["indicators"]["quote"][0]["volume"][:-1]
+
+        prov = self._provider(monkeypatch, payload)
+        q = prov.fetch_quote(
+            "TSLA", "特斯拉", now=datetime(2026, 10, 28, 5, 0, tzinfo=UTC)
+        )
+        assert q.price == pytest.approx(391.62)  # 只剩 10-26
+        assert q.quality == QuoteQuality.STALE
+        assert "滞后" in q.quality_note
+
+    def test_after_close_same_day_picks_latest_bar(self, monkeypatch):
+        """收盘后运行：取当日 bar。"""
+        prov = self._provider(monkeypatch, _canned_payload())
+        q = prov.fetch_quote(
+            "TSLA", "特斯拉", now=datetime(2026, 10, 27, 21, 0, tzinfo=UTC)  # 17:00 ET 盘后
+        )
+        assert q.price == pytest.approx(407.46)
+        assert q.change_percent == pytest.approx(4.04, abs=0.01)
+        assert q.quality == QuoteQuality.OK
