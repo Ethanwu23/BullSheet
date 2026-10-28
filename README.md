@@ -331,17 +331,22 @@ data/2026-10-26/
 # 渲染（使用已生成的内容，不会重新采集）
 usmarket render --date 2026-10-26
 
+# 单图速览（一张长图装下全部内容，CI 默认）
+usmarket render --date 2026-10-26 --template one_page
+
 # 切换到「重大新闻专题」模板
 usmarket render --date 2026-10-26 --template flash_brief
 # 或在生成时指定
-usmarket generate --date 2026-10-26 --template flash_brief
+usmarket generate --date 2026-10-26 --template one_page
 ```
 
-**默认规格**：1080×1440 竖屏 PNG，封面 1 张 + 正文 5–7 张。
+**默认规格**：`daily_review` / `flash_brief` 为 1080×1440 竖屏 PNG，封面 1 张 + 正文 5–7 张；
+**`one_page` 为单张长图**（宽 1080，高度按内容自适应约 2500–3000，比例在小红书长图限制内）。
 
 | 模板 | 用途 | 结构 |
 | --- | --- | --- |
-| `daily_review` | 每日市场复盘 | 封面（三大指数）→ 概览 → 要闻 1–2 页 → 个股异动 → 财报/宏观 → 次日关注+风险+来源 |
+| `one_page` | **单图速览（CI 默认）** | 一张长图装下全部：标题 → 三大指数 → 概览 → 要闻 → 个股异动 → 明日关注 → 风险+免责 |
+| `daily_review` | 多页每日复盘 | 封面（三大指数）→ 概览 → 要闻 1–2 页 → 个股异动 → 财报/宏观 → 次日关注+风险+来源 |
 | `flash_brief` | 重大新闻专题 | 封面（大标题+要点条）→ 每条新闻一页（大号序号+引言块）→ 风险与来源 |
 
 示例（均由本项目实际渲染）：
@@ -358,6 +363,7 @@ usmarket generate --date 2026-10-26 --template flash_brief
 | `docs/examples/flash_brief_cover.png` | 专题模板封面 |
 | `docs/examples/flash_brief_page1.png` | 专题正文页 |
 | `docs/examples/flash_brief_page2.png` | 专题正文页 |
+| `docs/examples/one_page.png` | **单图速览**（一张长图装下全部内容） |
 | `docs/examples/report_example.md` | Markdown 日报示例（规则式，离线可复现） |
 | `docs/examples/sources_example.md` | 来源与数据清单示例 |
 | `docs/examples/REVIEW_example.md` | 人工审核文件示例 |

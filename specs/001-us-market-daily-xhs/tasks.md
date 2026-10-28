@@ -138,6 +138,19 @@
 
 ---
 
+## Phase 6.6 — 增量：CI 全自动化 + 单图模板（one_page）
+
+> 背景：用户要求"每天早上所有内容集中在一张图片上"且全流程无人工干预。
+
+- [x] T086 GitHub Secrets/Variables 配置（DASHSCOPE_API_KEY / LLM_PROVIDER=dashscope / LLM_EXTRA_BODY_JSON），workflow 传递百炼密钥
+- [x] T087 修复 workflow YAML 语法错误（LLM_EXTRA_BODY_JSON 默认值中的 JSON 冒号破坏解析，dispatch 422、定时运行会失败）——默认值改由 Variables 提供
+- [x] T088 CI 真实验收：dispatch 触发成功，产物 `generator=openai_compatible`（百炼真实生成，4 要闻 7 图）
+- [x] T089 新增 `one_page` 单图模板：宽 1080 高度自适应长图（预留画布 + 内容超限自动翻倍重画 + 尾部裁剪）
+- [x] T090 渲染器兼容动态高度（one_page 只校验宽度）；CLI `--template` 增加 one_page；CI 默认模板改为 one_page（可用 IMAGE_TEMPLATE Variable 覆盖）
+- [x] T091 `tests/unit/test_one_page.py`（5 项）：单图、动态高度、非空白、小画布强制重画、render_images 兼容
+
+---
+
 ## 未完成 / 已明确排除
 
 - 真实小红书自动发布：**未验收**，仅在"授权 + 兼容 + 实测通过"后启用（见 README Phase 5 章节）。

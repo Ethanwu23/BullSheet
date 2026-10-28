@@ -106,7 +106,8 @@ jobs:
           if [ "${{ github.event.inputs.offline }}" = "true" ]; then
             ARGS+=(--offline)
           fi
-          ARGS+=(--template "${{ github.event.inputs.template || 'daily_review' }}")
+          # 模板优先级：手动输入 > IMAGE_TEMPLATE Variable > one_page（单图默认）
+          ARGS+=(--template "${{ github.event.inputs.template || vars.IMAGE_TEMPLATE || 'one_page' }}")
           usmarket generate "${ARGS[@]}" 2>&1 | tee generate.log
           echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 

@@ -203,7 +203,7 @@ def generate(
         help="LLM provider: rule_based|dashscope|openai_compatible|anthropic",
     ),
     template: str | None = typer.Option(
-        None, "--template", help="图片模板: daily_review|flash_brief"
+        None, "--template", help="图片模板: one_page(单图)|daily_review|flash_brief"
     ),
     data_dir: str | None = typer.Option(None, "--data-dir", help="产物根目录"),
 ) -> None:

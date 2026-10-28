@@ -37,6 +37,10 @@ def build_template(cfg: AppConfig, theme: ResolvedTheme):
         from usmarket.image_renderer.templates.daily_review import DailyReviewTemplate
 
         return DailyReviewTemplate(cfg, theme)
+    if name == "one_page":
+        from usmarket.image_renderer.templates.one_page import OnePageTemplate
+
+        return OnePageTemplate(cfg, theme)
     raise RenderError(f"未知图片模板: {name}")
 
 
@@ -76,7 +80,13 @@ def render_images(
         raise RenderError("模板未生成任何图片")
 
     for image in images:
-        if image.size != (cfg.image.width, cfg.image.height):
+        # one_page 模板高度自适应（长图），只校验宽度；其余模板要求与配置完全一致
+        if template.name == "one_page":
+            if image.size[0] != cfg.image.width:
+                raise RenderError(
+                    f"图片宽度 {image.size[0]} 与配置 {cfg.image.width} 不一致"
+                )
+        elif image.size != (cfg.image.width, cfg.image.height):
             raise RenderError(
                 f"图片尺寸 {image.size} 与配置 {(cfg.image.width, cfg.image.height)} 不一致"
             )
