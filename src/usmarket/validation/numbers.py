@@ -76,6 +76,45 @@ def build_allowed_numbers(
     return allowed
 
 
+def build_allowed_values(
+    snapshot: QuoteSnapshot | None, input_texts: list[str]
+) -> set[float]:
+    """构建允许数值集合（用于位数约简的数值级近似匹配）。
+
+    仅收录行情数字（价格/涨跌幅等）与新闻原文数字的浮点值，
+    供 scan_text_numbers 判定 "1.6" 是否为 "1.61" 的合法舍入。
+    """
+    values: set[float] = set()
+
+    if snapshot is not None:
+        for quote in snapshot.all_quotes():
+            for value in (
+                quote.price,
+                quote.previous_close,
+                quote.change,
+                quote.change_percent,
+            ):
+                if value is not None:
+                    values.add(abs(float(value)))
+            if quote.volume:
+                values.add(float(quote.volume))
+
+    for text in input_texts:
+        for match in _DECIMAL_RE.finditer(text):
+            try:
+                values.add(abs(float(match.group(0).replace(",", ""))))
+            except ValueError:
+                pass
+        for match in _PERCENT_RE.finditer(text):
+            raw = match.group(0).replace(",", "").replace(" ", "").rstrip("%")
+            try:
+                values.add(abs(float(raw)))
+            except ValueError:
+                pass
+
+    return values
+
+
 def verify_structural_numbers(
     content: DailyContent, snapshot: QuoteSnapshot
 ) -> list[NumberIssue]:
@@ -158,22 +197,46 @@ def _is_exempt(token: str) -> bool:
 
 
 def scan_text_numbers(
-    content: DailyContent, allowed: set[str]
+    content: DailyContent, allowed: set[str], *, allowed_values: set[float] | None = None
 ) -> list[NumberIssue]:
-    """扫描正文中的疑似行情数字，未在输入数据中出现的视为可疑。"""
+    """扫描正文中的疑似行情数字，未在输入数据中出现的视为可疑。
+
+    匹配规则（从严到宽）：
+    1. 字符串精确匹配（含千分位/小数位变体）；
+    2. 数值近似匹配：token 是某个允许值的**合法位数约简**（如 1.6 ≈ 1.61）。
+       模型对数字做正常四舍五入不应触发整体回退（实测 qwen 会把 1.61% 写成 1.6%）。
+       判定：token 的小数位数 < 允许值，且二者差的绝对值 < 末位一半的容差，
+       即 token 必须是允许值的舍入结果，而非不同来源的数字。
+    """
     issues: list[NumberIssue] = []
+    values = allowed_values or set()
+
+    def _numeric_ok(token: str) -> bool:
+        """token 是否是某个允许值的合法舍入（round(number, d) == number 语义）。"""
+        try:
+            number = float(token)
+        except ValueError:
+            return False
+        decimals = len(token.split(".")[1]) if "." in token else 0
+        for base in values:
+            # token 须是 base 舍入到相同小数位的结果（容差=末位一半+epsilon）
+            if abs(base - number) <= 0.5 * 10**-decimals + 1e-9:
+                # 且 base 舍入到该位数后应恰好等于 token（排除"靠近但不同"的数字）
+                if round(base, decimals) == number:
+                    return True
+        return False
 
     for field_name, text in _iter_text_fields(content):
         for match in _DECIMAL_RE.finditer(text):
             token = match.group(0).replace(",", "")
-            if token in allowed or _fmt(float(token)) in allowed:
+            if token in allowed or _fmt(float(token)) in allowed or _numeric_ok(token):
                 continue
             issues.append(
                 NumberIssue(field_name, token, "正文中出现的数字在输入数据中找不到出处")
             )
         for match in _PERCENT_RE.finditer(text):
             raw = match.group(0).replace(",", "").replace(" ", "").rstrip("%")
-            if raw in allowed or _fmt(float(raw)) in allowed or _is_exempt(raw):
+            if raw in allowed or _fmt(float(raw)) in allowed or _is_exempt(raw) or _numeric_ok(raw):
                 continue
             issues.append(
                 NumberIssue(field_name, f"{raw}%", "正文中出现的百分比在输入数据中找不到出处")
@@ -210,5 +273,9 @@ def validate_numbers(
     issues: list[NumberIssue] = []
     if snapshot is not None:
         issues += verify_structural_numbers(content, snapshot)
-    issues += scan_text_numbers(content, build_allowed_numbers(snapshot, input_texts))
+    issues += scan_text_numbers(
+        content,
+        build_allowed_numbers(snapshot, input_texts),
+        allowed_values=build_allowed_values(snapshot, input_texts),
+    )
     return issues

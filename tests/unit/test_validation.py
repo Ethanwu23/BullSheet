@@ -10,6 +10,7 @@ from pydantic import ValidationError as PydanticValidationError
 from usmarket.validation.compliance import validate_compliance
 from usmarket.validation.numbers import (
     build_allowed_numbers,
+    build_allowed_values,
     scan_text_numbers,
     validate_numbers,
     verify_structural_numbers,
@@ -118,6 +119,32 @@ def test_fabricated_number_in_text_is_blocked(snapshot, news_items):
     values = " ".join(i.value for i in issues)
     assert "8999.99" in values or "8,999.99" in values
     assert "12.34" in values
+
+
+def test_rounded_number_is_accepted(snapshot, news_items):
+    """模型把涨跌幅四舍五入（如 1.61% → 1.6%）→ 合法约简，不应拦截。
+
+    实测 qwen3.8-flash 会对数字做正常舍入；逐字匹配曾导致整个生成无谓回退规则式。
+    """
+    # fixture 中 TSLA change_percent=2.2673；"2.3" 应视为合法约简
+    content = _content(summary="特斯拉上涨 2.3%，表现强势。")
+    issues = scan_text_numbers(
+        content,
+        build_allowed_numbers(snapshot, []),
+        allowed_values=build_allowed_values(snapshot, []),
+    )
+    assert not issues, f"位数约简不应被拦截: {issues}"
+
+
+def test_mismatched_number_still_blocked(snapshot, news_items):
+    """数值近似匹配不能放过真正的编造（与任何允许值都不接近的数字仍拦截）。"""
+    content = _content(summary="标普500 疯涨 33.33%。")
+    issues = scan_text_numbers(
+        content,
+        build_allowed_numbers(snapshot, []),
+        allowed_values=build_allowed_values(snapshot, []),
+    )
+    assert any("33.33" in i.value for i in issues)
 
 
 def test_real_numbers_pass(snapshot, news_items):
