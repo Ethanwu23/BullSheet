@@ -159,9 +159,15 @@ def test_rendered_image_numbers_match_content(offline_cfg, snapshot, content, tm
 
 @requires_font
 def test_page_count_within_config(offline_cfg, snapshot, content, tmp_path):
-    result = render_images(offline_cfg, content, snapshot, tmp_path / "images")
-    assert len(result.pages) <= offline_cfg.image.max_pages
-    assert len(result.pages) >= offline_cfg.image.min_pages
+    """多页模板（daily_review）的页数必须落在配置区间内。"""
+    from dataclasses import replace
+
+    cfg = replace(
+        offline_cfg, image=replace(offline_cfg.image, template="daily_review")
+    )
+    result = render_images(cfg, content, snapshot, tmp_path / "images")
+    assert len(result.pages) <= cfg.image.max_pages
+    assert len(result.pages) >= cfg.image.min_pages
 
 
 def test_unknown_template_raises(offline_cfg):
