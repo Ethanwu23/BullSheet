@@ -126,6 +126,10 @@ watchlist:
 
 所需配置（已在仓库设置）：Secret `DASHSCOPE_API_KEY`；Variable `LLM_PROVIDER=dashscope`。
 
+> **Fork 说明**：GitHub Secrets 不会随 fork 传播。fork 本项目后 workflow 可以运行，
+> 但 LLM 会回退规则式（英文标题、数字仍准确）；如需 AI 总结/翻译，请在自己的
+> 仓库 Settings → Secrets 配置 `DASHSCOPE_API_KEY`（或改用任意 OpenAI 兼容端点）。
+
 ---
 
 ## 已验证清单
