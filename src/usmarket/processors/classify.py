@@ -17,6 +17,7 @@ COMPANY_ALIASES: dict[str, tuple[str, ...]] = {
     "AMZN": ("amazon", "亚马逊"),
     "META": ("meta platforms", "facebook", "meta"),
     "TSLA": ("tesla", "特斯拉"),
+    "SPCX": ("spacex", "space exploration", "starlink", "星链"),
     "AMD": ("amd", "advanced micro"),
     "AVGO": ("broadcom", "博通"),
     "TSM": ("tsmc", "taiwan semiconductor", "台积电"),

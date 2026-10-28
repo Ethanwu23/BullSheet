@@ -10,8 +10,8 @@ watchlist:
   # 三大指数（Yahoo symbol 格式）
   indices: ["^GSPC", "^IXIC", "^DJI"]
   # 科技与 AI 龙头 + 用户自定义
-  # 七姐妹 + SpaceX。注意：SpaceX 未上市，无公开行情，图上会显示"数据缺失"
-  tickers: ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "SPACEX"]
+  # 七姐妹 + SpaceX（已上市，NASDAQ: SPCX，2026-10 实测 Yahoo 行情可用）
+  tickers: ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "SPCX"]
   # 关注主题（用于新闻归类与检索）
   topics: ["earnings", "fed", "inflation", "employment", "ai", "semiconductor", "merger"]
 
