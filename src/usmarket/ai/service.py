@@ -1,4 +1,10 @@
-"""内容生成服务：Provider 选择、解析、校验与兜底。"""
+"""内容生成服务。
+
+**架构（ADR-016）**：行情数据不交给模型加工。流程为：
+1. 规则式确定性生成全部结构化内容（指数、个股、来源、文案骨架）；
+2. LLM 只承担两个窄任务：盘后总结（evening_summary）+ 要闻标题中译（headlines）；
+3. 合并后过完整校验（数字可追溯 / 来源 / 合规），失败重试一次，仍失败沿用规则式内容。
+"""
 
 from __future__ import annotations
 
@@ -6,7 +12,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from usmarket.ai.base import ProviderUnavailableError, coerce_content, extract_json
+from usmarket.ai.base import ProviderUnavailableError, extract_json
 from usmarket.ai.prompts import SYSTEM_PROMPT, build_user_prompt
 from usmarket.ai.rule_based import generate_content as rule_based_generate
 from usmarket.config import AppConfig
@@ -49,7 +55,7 @@ def validate_content(
     news_items: list,
     cfg: AppConfig,
 ) -> list[str]:
-    """完整校验：结构 + 数字 + 来源 + 合规。返回错误列表（空表示通过）。"""
+    """完整校验：数字 + 来源 + 合规 + 结构。返回错误列表（空表示通过）。"""
     errors: list[str] = []
 
     issues_numbers = validate_numbers(
@@ -73,6 +79,45 @@ def validate_content(
     return errors
 
 
+def _merge_llm_parts(
+    base: DailyContent, payload: dict[str, Any]
+) -> DailyContent:
+    """把 LLM 的两个窄产物（总结 + 标题翻译）合并进规则式基础内容。
+
+    只触碰 evening_summary 与 top_news[].headline 两处，其余字段一律保留
+    规则式结果——行情数字不可能被模型改动（ADR-016）。
+    """
+    summary = payload.get("evening_summary")
+    headlines = payload.get("headlines")
+
+    if not isinstance(summary, str) or not summary.strip():
+        raise ProviderUnavailableError("模型未输出 evening_summary")
+    if not isinstance(headlines, list) or not headlines:
+        raise ProviderUnavailableError("模型未输出 headlines")
+    # 模型可能把输入的全部新闻都翻译（实测 qwen）：多于要闻数时取前 N 条即可
+    if len(headlines) < len(base.top_news):
+        raise ProviderUnavailableError(
+            f"headlines 数量（{len(headlines)}）少于要闻数（{len(base.top_news)}）"
+        )
+    headlines = headlines[: len(base.top_news)]
+
+    top_news = []
+    for entry, zh in zip(base.top_news, headlines, strict=True):
+        if not isinstance(zh, str) or not zh.strip():
+            raise ProviderUnavailableError("存在空的翻译标题")
+        # 保留规则式的【分类】前缀，替换英文标题为中文
+        prefix = entry.headline.split("】", 1)[0] + "】" if "】" in entry.headline else ""
+        top_news.append(entry.model_copy(update={"headline": prefix + zh.strip()}))
+
+    return base.model_copy(
+        update={
+            "evening_summary": summary.strip(),
+            "top_news": top_news,
+            "generator": "hybrid",
+        }
+    )
+
+
 def generate_daily_content(
     cfg: AppConfig,
     snapshot: QuoteSnapshot,
@@ -82,118 +127,63 @@ def generate_daily_content(
     provider: Any | None = None,
     fallback_on_invalid: bool = True,
 ) -> tuple[DailyContent, list[str]]:
-    """生成并校验每日内容。
-
-    返回 (内容, 警告列表)。校验失败时抛 ValidationError。
-    """
+    """生成每日内容：规则式基础 + LLM 窄任务（总结/翻译）合并。"""
     warnings: list[str] = []
     user_prompt, sources = build_user_prompt(cfg, snapshot, news_items)
-    _input_texts(news_items)
 
+    # 1) 规则式基础内容（数字全部来自行情快照与新闻原文，确定性生成）
+    content = _rule_based(cfg, snapshot, news_items, sources, now)
+
+    # 2) LLM 窄任务：总结 + 翻译
     prov = provider if provider is not None else build_provider(cfg)
-
     if prov is not None:
-        content = None
-        rule = None  # 惰性生成一次，供兜底/补齐复用
+        merged: DailyContent | None = None
         last_error: Exception | None = None
-        # LLM 输出偶发不合法（实测 qwen3.8-flash 约几%概率），重试一次再回退，
-        # 避免单次抖动导致当天内容质量降级。
+        # LLM 输出偶发不合法（实测 qwen3.8-flash），重试一次再沿用规则式内容
         for attempt in (1, 2):
             try:
                 raw = prov.generate(SYSTEM_PROMPT, user_prompt)
                 payload = extract_json(raw)
-                if payload is None:
+                if not isinstance(payload, dict):
                     raise ProviderUnavailableError("模型输出不是合法 JSON")
-                payload.setdefault("date", snapshot.date)
-                payload.setdefault("market_phase", snapshot.market_phase.value)
-                payload.setdefault("disclaimer", cfg.content.disclaimer)
-                payload.setdefault(
-                    "sources", [s.model_dump(mode="json") for s in sources]
+                candidate = _merge_llm_parts(content, payload)
+                errors = validate_content(
+                    candidate, snapshot, news_items=news_items, cfg=cfg
                 )
-                payload.setdefault("evening_summary", "")
-                payload.setdefault("generator", getattr(prov, "name", "llm"))
-                content = coerce_content(payload)
-                # 模型漏写盘后总结时，用规则式拼接补齐（数字同源，可过校验）
-                if not content.evening_summary:
-                    rule = rule or _rule_based(
-                        cfg, snapshot, news_items, sources, now
+                if errors:
+                    raise ProviderUnavailableError(
+                        "LLM 内容校验失败: " + "; ".join(errors[:3])
                     )
-                    content = content.model_copy(
-                        update={"evening_summary": rule.evening_summary}
-                    )
-                # 强制过滤 + 补齐：个股异动 = 恰好 watchlist 配置的全部标的
-                # （模型可能混入新闻里的其他股票，也可能漏写部分标的）
-                allowed = {q.symbol for q in snapshot.stocks}
-                if {m.symbol for m in content.watchlist_moves} != allowed:
-                    rule = rule or _rule_based(
-                        cfg, snapshot, news_items, sources, now
-                    )
-                    by_symbol = {m.symbol: m for m in content.watchlist_moves}
-                    # 模型写的优先，漏的用规则式补
-                    for m in rule.watchlist_moves:
-                        by_symbol.setdefault(m.symbol, m)
-                    merged = [
-                        by_symbol[s] for s in allowed if s in by_symbol
-                    ]
-                    dropped = [
-                        m.symbol for m in content.watchlist_moves
-                        if m.symbol not in allowed
-                    ]
-                    if dropped:
-                        LOGGER.warning(
-                            "已过滤非 watchlist 个股: %s", dropped,
-                            extra={"stage": "generate"},
-                        )
-                    LOGGER.info(
-                        "watchlist 个股合并后 %d 只（配置 %d 只）",
-                        len(merged), len(allowed), extra={"stage": "generate"},
-                    )
-                    content = content.model_copy(
-                        update={"watchlist_moves": merged}
-                    )
+                merged = candidate
                 break
-            except Exception as exc:  # noqa: BLE001 - 任何 LLM 异常都应回退而非中断
+            except Exception as exc:  # noqa: BLE001 - 任何 LLM 异常都应降级而非中断
                 last_error = exc
                 LOGGER.warning(
-                    "LLM 生成失败（第 %d 次）: %s", attempt, exc,
+                    "LLM 窄任务失败（第 %d 次）: %s", attempt, exc,
                     extra={"stage": "generate"},
                 )
-        if content is None:
+        if merged is not None:
+            content = merged
+        else:
             warnings.append(
-                f"LLM 生成失败，已回退规则式生成: {type(last_error).__name__}"
+                f"LLM 总结/翻译失败，沿用规则式内容: {type(last_error).__name__}"
             )
             LOGGER.warning(
-                "LLM 生成失败，回退规则式生成: %s",
-                last_error,
+                "LLM 窄任务失败，沿用规则式内容: %s", last_error,
                 extra={"stage": "generate"},
             )
-            content = _rule_based(cfg, snapshot, news_items, sources, now)
-        else:
-            errors = validate_content(content, snapshot, news_items=news_items, cfg=cfg)
-            if errors:
-                warnings.append("LLM 输出未通过校验，已回退规则式生成")
-                LOGGER.warning(
-                    "LLM 输出校验失败: %s", "; ".join(errors), extra={"stage": "validation"}
-                )
-                if fallback_on_invalid:
-                    content = _rule_based(cfg, snapshot, news_items, sources, now)
-                else:
-                    raise ValidationError("内容校验未通过", detail="; ".join(errors))
-    else:
-        content = _rule_based(cfg, snapshot, news_items, sources, now)
 
+    # 3) 最终校验（规则式基础必然通过；防回归）
     errors = validate_content(content, snapshot, news_items=news_items, cfg=cfg)
     if errors:
         raise ValidationError(
-            "内容校验未通过（已阻止发布）", detail="; ".join(errors)
+            "内容校验未通过（已阻止产出）", detail="; ".join(errors)
         )
 
     if content.low_confidence:
         warnings.append(
             "可用新闻不足或行情缺失，内容标记为 low_confidence，必须人工复核后再发布"
         )
-    if content.generator != "rule_based" and any("回退" in w for w in warnings):
-        pass
 
     LOGGER.info(
         "内容生成完成 generator=%s 要闻=%d 低置信=%s",
