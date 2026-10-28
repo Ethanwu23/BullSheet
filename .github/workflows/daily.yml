@@ -93,6 +93,8 @@ jobs:
           # 注意：值是 JSON，含冒号+空格会破坏 YAML 解析，因此默认值放 Variables 而非此处
           LLM_EXTRA_BODY_JSON: "${{ vars.LLM_EXTRA_BODY_JSON }}"
           LLM_TIMEOUT_SECONDS: ${{ vars.LLM_TIMEOUT_SECONDS || '180' }}
+          # 25 条来源的 URL 很占输出 token，4000 会被截断导致 JSON 不完整
+          LLM_MAX_TOKENS: ${{ vars.LLM_MAX_TOKENS || '8000' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MARKET_PROVIDER: ${{ vars.MARKET_PROVIDER || 'yahoo' }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}

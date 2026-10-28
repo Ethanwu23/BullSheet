@@ -62,6 +62,23 @@ class OpenAICompatibleProvider:
 
         try:
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+            finish = choice.get("finish_reason")
+            usage = data.get("usage", {})
+            # 诊断信息：截断（finish_reason=length）是"输出不是合法 JSON"的常见根因
+            LOGGER.info(
+                "LLM 响应: finish_reason=%s content_len=%s completion_tokens=%s",
+                finish,
+                len(content or ""),
+                usage.get("completion_tokens"),
+                extra={"stage": "generate"},
+            )
+            if finish == "length":
+                raise RuntimeError(
+                    "LLM 输出被 max_tokens 截断（finish_reason=length），"
+                    "请调大 LLM_MAX_TOKENS"
+                )
+            return content
         except (json.JSONDecodeError, KeyError, IndexError) as exc:
             raise RuntimeError(f"LLM 响应结构异常: {type(exc).__name__}") from exc
