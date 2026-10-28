@@ -33,7 +33,7 @@
 | B 行情数据 | 三大指数 + 自选股；涨跌幅、前收、交易阶段；缺失/过期/异常标记 | ✅ 已验证（Yahoo chart 实测） |
 | C AI 内容生成 | 可插拔 LLM（百炼 **已实测** / OpenAI 兼容 / Anthropic / 规则兜底）；结构化 JSON | ✅ 已验证（CI 真实产出） |
 | D 简报图片 | **一张自适应高度长图**；中文排版；数据与文案一致 | ✅ 已验证 |
-| E 定时调度 | GitHub Actions cron + 手动触发 + concurrency + artifact | ✅ 已验证（真实运行成功） |
+| E 定时调度 | GitHub Actions **手动触发** + concurrency + artifact | ✅ 已验证（真实运行成功） |
 | F 任务管理 | 状态机、CLI、失败定位、重跑、幂等 | ✅ 已验证 |
 
 **设计原则**（完整版见 `.specify/memory/constitution.md`）：
@@ -302,14 +302,13 @@ account:
 
 | 触发方式 | 说明 |
 | --- | --- |
-| `schedule: 30 22 * * 1-5` | UTC 22:30 ≈ 美东收盘后（每个交易日） |
-| `workflow_dispatch` | 手动触发，可指定 `run_date` / `template` / `offline` |
+| `workflow_dispatch` | **仅手动触发**（不设定时，按需运行节省 token）：Actions 页面 → Run workflow，可指定 `run_date` / `template` / `offline` |
 
-**每日使用方式**：无需任何操作，早上打开
-https://github.com/Ethanwu23/BullSheet/actions → 下载最新运行的 artifact（zip 解压即得长图 + 文字稿）。
+**使用方式**：想看简报时，打开
+https://github.com/Ethanwu23/BullSheet/actions → 选择 US Market Daily → Run workflow → 等几分钟 → 下载 artifact（zip 解压即得长图 + 文字稿）。
 
 **关键设计**：
-- GitHub cron 不保证精确到分钟；程序按美东时间解析"最近一个已收盘交易日"，不依赖触发时间
+- 目标交易日按美东时间解析"最近一个已收盘交易日"，不依赖触发时间——**任何时候手动触发都能得到正确的最新简报**
 - `concurrency` 避免同日重复生成
 - 失败时自动上传日志为 artifact 并写入失败摘要
 - 凭据通过 **GitHub Secrets** 注入
