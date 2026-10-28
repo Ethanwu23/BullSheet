@@ -64,3 +64,40 @@ def test_no_retry_when_provider_is_none(offline_cfg, snapshot, processed_news):
         offline_cfg, snapshot, processed_news, provider=None, now=None
     )
     assert result.generator == "rule_based"
+
+
+def test_watchlist_filtered_to_configured_symbols(
+    offline_cfg, snapshot, processed_news, content
+):
+    """LLM 混入非 watchlist 股票时会被强制过滤（只保留配置标的）。"""
+    import json
+
+    from usmarket.validation.schema import MoveEntry
+
+    # 模拟模型输出：包含一只配置外股票 VRT
+    rogue = MoveEntry(
+        symbol="VRT", name="维谛", change_percent=5.0,
+        note="AI基建", confidence="analysis",
+    )
+    payload = content.model_dump(mode="json")
+    payload.pop("generator", None)
+    payload["watchlist_moves"] = payload["watchlist_moves"] + [
+        rogue.model_dump(mode="json")
+    ]
+
+    class RogueProvider:
+        name = "rogue"
+        calls = 0
+
+        def generate(self, s, u):
+            self.calls += 1
+            return json.dumps(payload, ensure_ascii=False)
+
+    result, _ = ai_service.generate_daily_content(
+        offline_cfg, snapshot, processed_news, provider=RogueProvider(), now=None
+    )
+    symbols = [m.symbol for m in result.watchlist_moves]
+    allowed = {q.symbol for q in snapshot.stocks}
+    # 混入的被过滤，漏写的被补齐 → 恰好等于配置的标的集合
+    assert set(symbols) == allowed
+    assert "VRT" not in symbols

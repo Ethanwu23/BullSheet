@@ -94,6 +94,7 @@ def generate_daily_content(
 
     if prov is not None:
         content = None
+        rule = None  # 惰性生成一次，供兜底/补齐复用
         last_error: Exception | None = None
         # LLM 输出偶发不合法（实测 qwen3.8-flash 约几%概率），重试一次再回退，
         # 避免单次抖动导致当天内容质量降级。
@@ -114,9 +115,41 @@ def generate_daily_content(
                 content = coerce_content(payload)
                 # 模型漏写盘后总结时，用规则式拼接补齐（数字同源，可过校验）
                 if not content.evening_summary:
-                    rule = _rule_based(cfg, snapshot, news_items, sources, now)
+                    rule = rule or _rule_based(
+                        cfg, snapshot, news_items, sources, now
+                    )
                     content = content.model_copy(
                         update={"evening_summary": rule.evening_summary}
+                    )
+                # 强制过滤 + 补齐：个股异动 = 恰好 watchlist 配置的全部标的
+                # （模型可能混入新闻里的其他股票，也可能漏写部分标的）
+                allowed = {q.symbol for q in snapshot.stocks}
+                if {m.symbol for m in content.watchlist_moves} != allowed:
+                    rule = rule or _rule_based(
+                        cfg, snapshot, news_items, sources, now
+                    )
+                    by_symbol = {m.symbol: m for m in content.watchlist_moves}
+                    # 模型写的优先，漏的用规则式补
+                    for m in rule.watchlist_moves:
+                        by_symbol.setdefault(m.symbol, m)
+                    merged = [
+                        by_symbol[s] for s in allowed if s in by_symbol
+                    ]
+                    dropped = [
+                        m.symbol for m in content.watchlist_moves
+                        if m.symbol not in allowed
+                    ]
+                    if dropped:
+                        LOGGER.warning(
+                            "已过滤非 watchlist 个股: %s", dropped,
+                            extra={"stage": "generate"},
+                        )
+                    LOGGER.info(
+                        "watchlist 个股合并后 %d 只（配置 %d 只）",
+                        len(merged), len(allowed), extra={"stage": "generate"},
+                    )
+                    content = content.model_copy(
+                        update={"watchlist_moves": merged}
                     )
                 break
             except Exception as exc:  # noqa: BLE001 - 任何 LLM 异常都应回退而非中断
