@@ -25,6 +25,10 @@ def main(argv: list[str]) -> int:
     print()
     print("【概览】", d.get("summary"))
     print()
+    if d.get("evening_summary"):
+        print("【盘后总结（配图分享用）】")
+        print(d["evening_summary"])
+        print()
     for i, n in enumerate(d.get("top_news", []), 1):
         print(f"{i}. [{n.get('confidence')}] {n.get('headline')}")
         print("   ", (n.get("body") or "")[:200])

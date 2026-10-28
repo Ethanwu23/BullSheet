@@ -186,6 +186,7 @@ def _iter_text_fields(content: DailyContent) -> list[tuple[str, str]]:
         ("summary", content.summary),
         ("xhs.title", content.xhs.title),
         ("xhs.body", content.xhs.body),
+        ("evening_summary", content.evening_summary),
     ]
     for i, entry in enumerate(content.top_news):
         fields.append((f"top_news[{i}].headline", entry.headline))

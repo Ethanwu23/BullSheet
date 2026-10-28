@@ -450,7 +450,17 @@ def _apply_env(cfg: AppConfig) -> AppConfig:
 
 
 def load_config(path: Path | None = None, *, apply_env: bool = True) -> AppConfig:
-    """加载配置：YAML → 环境变量。"""
+    """加载配置：YAML → .env（若存在）→ 环境变量。
+
+    .env 中的值不覆盖已存在的真实环境变量（CI 里 Secrets 优先）。
+    """
+    # 延迟导入：离线环境缺 dotenv 时仍可用真实环境变量运行
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(override=False)
+    except ImportError:
+        pass
     cfg_path = path or DEFAULT_CONFIG_PATH
     cfg = _build_from_yaml(_load_yaml(cfg_path))
     if apply_env:

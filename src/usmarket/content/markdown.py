@@ -48,6 +48,12 @@ def render_report(
     lines.append(content.summary)
     lines.append("")
 
+    if content.evening_summary:
+        lines.append("## 盘后总结（可配图直接分享）")
+        lines.append("")
+        lines.append(content.evening_summary)
+        lines.append("")
+
     lines.append("## 二、三大指数")
     lines.append("")
     lines.append("| 名称 | 代码 | 最新 | 涨跌幅 | 前收 | 成交量 |")

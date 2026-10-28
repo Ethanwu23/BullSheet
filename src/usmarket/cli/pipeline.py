@@ -48,6 +48,7 @@ def day_paths(cfg: AppConfig, date: str) -> dict[str, Path]:
         "content_json": base / "content" / "content.json",
         "report": base / "content" / "report.md",
         "sources": base / "content" / "sources.md",
+        "evening_summary": base / "content" / "evening_summary.txt",
     }
 
 
@@ -182,7 +183,7 @@ def run_generate_command(
         task.warnings = warnings
         store.save(task)
 
-        # 落盘：结构化 JSON + Markdown + 来源清单
+        # 落盘：结构化 JSON + Markdown + 来源清单 + 盘后总结（可直接复制分享）
         save_content(content, paths["content_json"])
         paths["report"].write_text(
             render_report(content, snapshot, cfg, warnings=warnings), encoding="utf-8"
@@ -190,6 +191,10 @@ def run_generate_command(
         paths["sources"].write_text(
             render_sources_doc(cfg, snapshot, results), encoding="utf-8"
         )
+        if content.evening_summary:
+            paths["evening_summary"].write_text(
+                content.evening_summary + "\n", encoding="utf-8"
+            )
 
         if render:
             from usmarket.image_renderer.renderer import render_images

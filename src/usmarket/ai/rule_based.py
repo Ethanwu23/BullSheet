@@ -207,6 +207,38 @@ def generate_content(
     body_parts.append(cfg.content.disclaimer)
     xhs_body = "\n".join(body_parts)
 
+    # ---- 盘后总结（规则式兜底：只用已核实数字拼接；LLM 路径由模型撰写）----
+    if usable_indices:
+        up = [q for q in usable_indices if q.change_percent > 0]
+        down = [q for q in usable_indices if q.change_percent < 0]
+        move_desc = (
+            f"三大指数中{len(up)}涨{len(down)}跌"
+            if (up or down)
+            else "三大指数涨跌互现"
+        )
+        stock_moves = [
+            m for m in watchlist_moves if m.change_percent is not None
+        ]
+        movers = ""
+        if stock_moves:
+            biggest_up = max(stock_moves, key=lambda m: m.change_percent)
+            biggest_down = min(stock_moves, key=lambda m: m.change_percent)
+            movers = (
+                f"个股方面，{biggest_up.name}领涨（{biggest_up.change_percent:+.2f}%），"
+                f"{biggest_down.name}承压（{biggest_down.change_percent:+.2f}%）。"
+            )
+        evening_summary = (
+            f"{_fmt_date(date_str)}美股{phase_zh}：{move_desc}，"
+            + "；".join(index_lines)
+            + f"。{movers}"
+            + "详细数据与要闻见图。"
+        )
+    else:
+        evening_summary = (
+            f"{_fmt_date(date_str)}美股{phase_zh}：本次未获取到可用行情数据，"
+            "仅呈现已核实新闻，详见图片与来源清单。"
+        )
+
     content = DailyContent(
         date=date_str,
         market_phase=snapshot.market_phase.value,
@@ -224,6 +256,7 @@ def generate_content(
             tags=list(cfg.content.tags[: cfg.content.max_tags]),
         ),
         sources=sources or [],
+        evening_summary=evening_summary,
         disclaimer=cfg.content.disclaimer,
         low_confidence=len(top_news) < cfg.content.top_news_min or not snapshot.has_any_data(),
         data_notes=list(snapshot.errors),

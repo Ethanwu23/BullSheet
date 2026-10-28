@@ -59,7 +59,10 @@ class TestDashScopePreset:
         assert cfg.llm.model == "qwen3.8-max"
         assert cfg.llm.base_url == "https://example.invalid/v1"
 
-    def test_missing_key_is_reported_without_value(self, clean_env):
+    def test_missing_key_is_reported_without_value(self, clean_env, monkeypatch):
+        # 隔离本机 .env（load_dotenv 会把真实 key 注入，干扰"缺 key"断言）
+        monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)
+
         clean_env.setenv("LLM_PROVIDER", "dashscope")
         missing = validate_sensitive_config(load_config())
         assert any("DASHSCOPE" in m or "LLM_API_KEY" in m for m in missing)

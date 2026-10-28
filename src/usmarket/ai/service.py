@@ -109,8 +109,15 @@ def generate_daily_content(
                 payload.setdefault(
                     "sources", [s.model_dump(mode="json") for s in sources]
                 )
+                payload.setdefault("evening_summary", "")
                 payload.setdefault("generator", getattr(prov, "name", "llm"))
                 content = coerce_content(payload)
+                # 模型漏写盘后总结时，用规则式拼接补齐（数字同源，可过校验）
+                if not content.evening_summary:
+                    rule = _rule_based(cfg, snapshot, news_items, sources, now)
+                    content = content.model_copy(
+                        update={"evening_summary": rule.evening_summary}
+                    )
                 break
             except Exception as exc:  # noqa: BLE001 - 任何 LLM 异常都应回退而非中断
                 last_error = exc

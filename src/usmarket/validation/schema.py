@@ -95,6 +95,8 @@ class DailyContent(BaseModel):
     risk_notes: list[str] = Field(default_factory=list)
     xhs: XhsContent
     sources: list[SourceRef] = Field(default_factory=list)
+    # 盘后总结：一段适合与简报图片配套分享的中文文字（LLM 生成；规则式拼接兜底）
+    evening_summary: str = ""
     disclaimer: str = ""
     low_confidence: bool = False
     data_notes: list[str] = Field(default_factory=list)
