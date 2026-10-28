@@ -70,6 +70,7 @@ jobs:
         env:
           LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'rule_based' }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
           LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
           LLM_MODEL: ${{ vars.LLM_MODEL }}
           MARKET_PROVIDER: ${{ vars.MARKET_PROVIDER || 'yahoo' }}
@@ -83,8 +84,12 @@ jobs:
         env:
           LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'rule_based' }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
           LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
           LLM_MODEL: ${{ vars.LLM_MODEL }}
+          # 百炼关闭思考链（实测：开启时一次生成 100-120s 易超时，关闭后 30-40s）
+          LLM_EXTRA_BODY_JSON: ${{ vars.LLM_EXTRA_BODY_JSON || '{"chat_template_kwargs": {"enable_thinking": false}}' }}
+          LLM_TIMEOUT_SECONDS: ${{ vars.LLM_TIMEOUT_SECONDS || '180' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MARKET_PROVIDER: ${{ vars.MARKET_PROVIDER || 'yahoo' }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
