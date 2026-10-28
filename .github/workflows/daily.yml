@@ -25,11 +25,13 @@ on:
         default: false
         type: boolean
       template:
-        description: "图片模板"
+        description: "图片模板（留空则用 IMAGE_TEMPLATE Variable，默认 one_page）"
         required: false
-        default: "daily_review"
+        default: ""
         type: choice
         options:
+          - ""
+          - one_page
           - daily_review
           - flash_brief
 

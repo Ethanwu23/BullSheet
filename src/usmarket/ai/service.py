@@ -93,20 +93,40 @@ def generate_daily_content(
     prov = provider if provider is not None else build_provider(cfg)
 
     if prov is not None:
-        try:
-            raw = prov.generate(SYSTEM_PROMPT, user_prompt)
-            payload = extract_json(raw)
-            if payload is None:
-                raise ProviderUnavailableError("模型输出不是合法 JSON")
-            payload.setdefault("date", snapshot.date)
-            payload.setdefault("market_phase", snapshot.market_phase.value)
-            payload.setdefault("disclaimer", cfg.content.disclaimer)
-            payload.setdefault("sources", [s.model_dump(mode="json") for s in sources])
-            payload.setdefault("generator", getattr(prov, "name", "llm"))
-            content = coerce_content(payload)
-        except Exception as exc:  # noqa: BLE001 - 任何 LLM 异常都应回退而非中断
-            warnings.append(f"LLM 生成失败，已回退规则式生成: {type(exc).__name__}")
-            LOGGER.warning("LLM 生成失败，回退规则式生成: %s", exc, extra={"stage": "generate"})
+        content = None
+        last_error: Exception | None = None
+        # LLM 输出偶发不合法（实测 qwen3.8-flash 约几%概率），重试一次再回退，
+        # 避免单次抖动导致当天内容质量降级。
+        for attempt in (1, 2):
+            try:
+                raw = prov.generate(SYSTEM_PROMPT, user_prompt)
+                payload = extract_json(raw)
+                if payload is None:
+                    raise ProviderUnavailableError("模型输出不是合法 JSON")
+                payload.setdefault("date", snapshot.date)
+                payload.setdefault("market_phase", snapshot.market_phase.value)
+                payload.setdefault("disclaimer", cfg.content.disclaimer)
+                payload.setdefault(
+                    "sources", [s.model_dump(mode="json") for s in sources]
+                )
+                payload.setdefault("generator", getattr(prov, "name", "llm"))
+                content = coerce_content(payload)
+                break
+            except Exception as exc:  # noqa: BLE001 - 任何 LLM 异常都应回退而非中断
+                last_error = exc
+                LOGGER.warning(
+                    "LLM 生成失败（第 %d 次）: %s", attempt, exc,
+                    extra={"stage": "generate"},
+                )
+        if content is None:
+            warnings.append(
+                f"LLM 生成失败，已回退规则式生成: {type(last_error).__name__}"
+            )
+            LOGGER.warning(
+                "LLM 生成失败，回退规则式生成: %s",
+                last_error,
+                extra={"stage": "generate"},
+            )
             content = _rule_based(cfg, snapshot, news_items, sources, now)
         else:
             errors = validate_content(content, snapshot, news_items=news_items, cfg=cfg)
