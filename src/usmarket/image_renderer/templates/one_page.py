@@ -7,10 +7,9 @@
 1. 日期 + 标题
 2. 三大指数（紧凑行）
 3. 今日概览（限行）
-4. 要闻（每条限 3 行内）
+4. 要闻速递（每条限 3 行内）
 5. 个股异动（紧凑列表）
-6. 明日关注 / 风险提示
-7. 免责声明 footer（画在内容末尾，而非画布底部）
+6. 底部一栏：风险提示 + 数据来源（两行简洁文字）
 """
 
 from __future__ import annotations
@@ -119,10 +118,7 @@ class OnePageTemplate(BaseTemplate):
         # 要闻
         if content.top_news:
             self._guard(canvas)
-            self._line(
-                canvas, f"要闻速递（{len(content.top_news)} 条）",
-                "h2", self.theme.text_primary,
-            )
+            self._line(canvas, "要闻速递", "h2", self.theme.text_primary)
             for entry in content.top_news:
                 self._guard(canvas)
                 self._line(
@@ -158,33 +154,12 @@ class OnePageTemplate(BaseTemplate):
                 )
                 self._compact_quote(canvas, quote)
 
-        # 明日关注
-        if content.next_session:
+        # 低置信度提示（若有）
+        if content.low_confidence:
             self._guard(canvas)
             canvas.cursor_y += 12
-            self.divider(canvas)
-            canvas.cursor_y += 10
-            self._line(canvas, "明日关注", "h2", self.theme.text_primary)
-            for item in content.next_session[:3]:
-                self._line(
-                    canvas, "· " + item, "tiny", self.theme.text_secondary,
-                    max_lines=2, gap=5,
-                )
-
-        # 风险提示
-        if content.risk_notes:
-            self._guard(canvas)
-            canvas.cursor_y += 10
-            self._line(canvas, "风险提示", "h2", self.theme.negative)
-            for note in content.risk_notes[:2]:
-                self._line(
-                    canvas, "· " + note, "tiny", self.theme.text_secondary,
-                    max_lines=2, gap=5,
-                )
-
-        if content.low_confidence:
             self._line(
-                canvas, "低置信度：数据或新闻不足，发布前需人工复核", "tiny",
+                canvas, "低置信度：数据或新闻不足，内容需人工复核", "tiny",
                 self.theme.negative, max_lines=1,
             )
             canvas.cursor_y += 6
@@ -192,24 +167,21 @@ class OnePageTemplate(BaseTemplate):
     def _draw_footer(
         self, canvas: Canvas, content: DailyContent, snapshot: QuoteSnapshot
     ) -> int:
-        """footer 画在内容末尾（而非画布底部），返回结束 y。"""
+        """底部一栏：风险提示 + 数据来源合并为两行简洁文字。"""
         self._guard(canvas)
         canvas.cursor_y += 18
         self.divider(canvas)
         canvas.cursor_y += 12
+        risk = (content.risk_notes[0] if content.risk_notes
+                else "内容不构成投资建议，数据可能存在延迟")
+        self._line(canvas, risk, "tiny", self.theme.text_secondary, max_lines=2)
         self._line(
             canvas,
-            f"数据来源：{snapshot.provider}"
-            + ("（延迟行情，非实时）" if snapshot.is_delayed else "")
-            + f" · 来源 {len(content.sources)} 条",
-            "tiny", self.theme.text_secondary,
+            f"数据：{snapshot.provider}"
+            + ("（延迟）" if snapshot.is_delayed else "")
+            + f" · 来源{len(content.sources)}条 · @{self.cfg.account.name}",
+            "tiny", self.theme.muted,
         )
-        self._line(
-            canvas,
-            content.disclaimer or self.cfg.content.disclaimer,
-            "tiny", self.theme.text_secondary,
-        )
-        self._line(canvas, f"@{self.cfg.account.name}", "tiny", self.theme.muted)
         return canvas.cursor_y + 8
 
     # ---------- 原语 ----------
