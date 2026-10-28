@@ -90,7 +90,8 @@ image:
   height: 1440
   min_pages: 5
   max_pages: 7
-  template: daily_review
+  # 模板：one_page（单张长图，默认）| daily_review（多页复盘）| flash_brief（专题）
+  template: one_page
   margin: 80
   theme:
     background: "#0F172A"
