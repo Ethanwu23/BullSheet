@@ -144,7 +144,7 @@ def generate_content(
                 source_ref=f"quote:{quote.symbol}",
             )
         )
-    watchlist_moves = watchlist_moves[:6]
+    watchlist_moves = watchlist_moves[:8]
 
     # ---- 财报/宏观（来自新闻分类）----
     events: list[EventEntry] = []

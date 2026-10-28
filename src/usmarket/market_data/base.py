@@ -58,6 +58,9 @@ _DISPLAY_NAMES: dict[str, str] = {
     "AMZN": "亚马逊",
     "META": "Meta",
     "TSLA": "特斯拉",
+    # SpaceX 未上市（私人公司），无公开行情：
+    # 加入 watchlist 只会得到"数据缺失"卡片，用于提示读者其非上市身份
+    "SPACEX": "SpaceX(未上市)",
     "AMD": "AMD",
     "AVGO": "博通",
     "TSM": "台积电",

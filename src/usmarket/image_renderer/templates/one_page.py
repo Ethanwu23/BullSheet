@@ -146,8 +146,8 @@ class OnePageTemplate(BaseTemplate):
             self._guard(canvas)
             self.divider(canvas)
             canvas.cursor_y += 10
-            self._line(canvas, "个股异动", "h2", self.theme.text_primary)
-            for entry in content.watchlist_moves[:6]:
+            self._line(canvas, "个股异动（收盘价）", "h2", self.theme.text_primary)
+            for entry in content.watchlist_moves[:8]:
                 quote = snapshot.by_symbol(entry.symbol) or Quote(
                     symbol=entry.symbol,
                     display_name=entry.name,
